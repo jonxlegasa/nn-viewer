@@ -14,6 +14,7 @@ An interactive visualization tool for analyzing Physics-Informed Neural Networks
   - Coefficient and solution error plots
   - Training loss curves (total, BC, PDE, supervised)
 - Toggle data series visibility with checkboxes
+- Auto-hide empty plots (plots with no data are automatically hidden)
 - Reset button to restore default slider values
 
 ## Installation
