@@ -1,24 +1,22 @@
+"""Neural network visualization tool with interactive controls.
+
+A generalized visualization framework for interactive multi-plot analysis.
+Supports multiple subplots with different configurations, interactive sliders,
+automatic data updates, and flexible plot types (line, scatter, log scale, etc.).
+"""
+
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import json
 import sys
 
-from matplotlib.widgets import Button, Slider, CheckButtons
-from matplotlib.patches import Rectangle
+from matplotlib.gridspec import GridSpec
 from typing import Dict, List, Callable, Optional, Tuple, Any
 from dataclasses import dataclass
 
-# Dark mode color scheme
-DARK_COLORS = {
-    "background": "#1e1e1e",
-    "axes_bg": "#2d2d2d",
-    "text": "#e0e0e0",
-    "grid": "#404040",
-    "accent": "#569cd6",
-    "widget_bg": "#3c3c3c",
-    "widget_active": "#569cd6",
-}
+from theme import get_theme, Theme, DARK_THEME
+from ui import CheckboxPanel, SliderPanel, SliderConfig, ButtonPanel
 
 
 # Try to find a working interactive backend
@@ -55,19 +53,6 @@ class PlotConfig:
     grid: bool = True
 
 
-@dataclass
-class SliderConfig:
-    """Configuration for a slider widget."""
-
-    name: str
-    label: str
-    valmin: float
-    valmax: float
-    valinit: float
-    valstep: Optional[float] = 1
-    position: Tuple[float, float, float, float] = (0.25, 0.1, 0.65, 0.03)
-
-
 class GeneralizedVisualizer:
     """
     A generalized visualization framework for interactive multi-plot analysis.
@@ -88,6 +73,7 @@ class GeneralizedVisualizer:
         figsize: Tuple[int, int] = (14, 10),
         main_title: str = "Analysis Dashboard",
         hide_empty_plots: bool = True,
+        theme: Optional[Theme] = None,
     ):
         """
         Initialize the generalized visualizer.
@@ -113,6 +99,8 @@ class GeneralizedVisualizer:
           Main title for the figure
         hide_empty_plots : bool
           If True, automatically hide plots that have no data/lines
+        theme : Theme, optional
+          Color theme. Defaults to DARK_THEME.
         """
         self.data_dict = data_dict
         self.plot_configs = plot_configs
@@ -121,6 +109,8 @@ class GeneralizedVisualizer:
         self.figsize = figsize
         self.main_title = main_title
         self.hide_empty_plots = hide_empty_plots
+        self.theme = theme if theme is not None else DARK_THEME
+        self.colors = self.theme.to_dict()
 
         # Store current slider values
         self.slider_values = {config.name: config.valinit for config in slider_configs}
@@ -132,41 +122,86 @@ class GeneralizedVisualizer:
         plt.style.use("dark_background")
 
         # Create figure and subplots
-        self.fig = plt.figure(figsize=self.figsize, facecolor=DARK_COLORS["background"])
+        self.fig = plt.figure(figsize=self.figsize, facecolor=self.colors["background"])
         self.fig.suptitle(
-            self.main_title, fontsize=16, fontweight="bold", color=DARK_COLORS["text"]
+            "PINNs Analysis",
+            fontsize=16,
+            fontweight="bold",
+            color=self.colors["text"],
         )
 
-        # Adjust layout for centered plots with widgets below
+        # Adjust layout for plots on the right, checkboxes on the left
         num_sliders = len(slider_configs)
         bottom_margin = 0.08 + (num_sliders * 0.045)
         self.fig.subplots_adjust(
-            left=0.06,
-            right=0.94,
-            top=0.92,
+            left=0.08,
+            right=0.92,
+            top=0.90,
             bottom=bottom_margin,
-            hspace=0.35,
-            wspace=0.30,
+            hspace=0.45,
+            wspace=0.45,
         )
 
-        # Create subplots
+        # Create subplots with GridSpec for equal sizing
         self.axes = []
         self.lines = {}  # Store line objects for updating
 
+        gs = GridSpec(layout[0], layout[1], figure=self.fig)
         for idx, config in enumerate(plot_configs):
-            ax = self.fig.add_subplot(layout[0], layout[1], idx + 1)
+            ax = self.fig.add_subplot(gs[idx // layout[1], idx % layout[1]])
             self.axes.append(ax)
             self._setup_plot(ax, config, idx)
 
+        # Create UI components
+        self._create_ui_components()
+
+    def _create_ui_components(self):
+        """Create all UI components (sliders, buttons, checkboxes)."""
         # Create sliders
-        self.sliders = {}
-        self._create_sliders()
+        self.slider_panel = SliderPanel(self.fig, self.slider_configs, self.colors)
+        self.slider_panel.on_change(self._on_slider_change)
 
         # Create reset button
-        self._create_reset_button()
+        self.button_panel = ButtonPanel(self.fig, self.colors)
+        self.button_panel.on_click(self._on_reset)
 
         # Create checkbox panel for plot visibility
-        self._create_checkboxes()
+        self.checkbox_panel = CheckboxPanel(self.fig, self.plot_configs, self.colors)
+        self.checkbox_panel.on_visibility_changed(self._on_checkbox_toggle)
+
+    def _on_slider_change(self, slider_name: str, value: float):
+        """Callback when any slider changes."""
+        self.slider_values[slider_name] = value
+        for idx, (ax, config) in enumerate(zip(self.axes, self.plot_configs)):
+            self._update_plot(ax, config, idx)
+        self.fig.canvas.draw_idle()
+
+    def _on_reset(self):
+        """Reset all sliders to initial values."""
+        self.slider_panel.reset()
+
+    def _on_checkbox_toggle(self, label: str, visible: bool):
+        """Toggle visibility of a data series across all plots."""
+        # Update all lines with this label across all plots
+        for plot_idx, line_list in self.lines.items():
+            for line in line_list:
+                if hasattr(line, "get_label") and line.get_label() == label:
+                    line.set_visible(visible)
+
+        # Update legends to reflect visibility
+        for ax in self.axes:
+            legend = ax.get_legend()
+            if legend:
+                for text, handle in zip(legend.get_texts(), legend.legend_handles):
+                    if text.get_text() == label:
+                        text.set_alpha(1.0 if visible else 0.3)
+                        handle.set_alpha(1.0 if visible else 0.3)
+
+        # Hide/show entire plots based on whether they have any visible lines
+        if self.hide_empty_plots:
+            self._update_plot_visibility()
+
+        self.fig.canvas.draw_idle()
 
     def _setup_plot(self, ax, config: PlotConfig, plot_idx: int):
         """
@@ -181,19 +216,19 @@ class GeneralizedVisualizer:
         plot_idx : int
           Index of this plot
         """
-        # Apply dark mode styling to axis
-        ax.set_facecolor(DARK_COLORS["axes_bg"])
+        # Apply theme styling to axis
+        ax.set_facecolor(self.colors["axes_bg"])
         ax.set_title(
-            config.title, fontweight="bold", color=DARK_COLORS["text"], fontsize=11
+            config.title, fontweight="bold", color=self.colors["text"], fontsize=11
         )
-        ax.set_xlabel(config.xlabel, color=DARK_COLORS["text"], fontsize=10)
-        ax.set_ylabel(config.ylabel, color=DARK_COLORS["text"], fontsize=10)
-        ax.tick_params(colors=DARK_COLORS["text"], labelsize=9)
+        ax.set_xlabel(config.xlabel, color=self.colors["text"], fontsize=10)
+        ax.set_ylabel(config.ylabel, color=self.colors["text"], fontsize=10)
+        ax.tick_params(colors=self.colors["text"], labelsize=9)
         for spine in ax.spines.values():
-            spine.set_color(DARK_COLORS["grid"])
+            spine.set_color(self.colors["grid"])
 
         if config.grid:
-            ax.grid(True, alpha=0.3, color=DARK_COLORS["grid"])
+            ax.grid(True, alpha=0.3, color=self.colors["grid"])
 
         # Initialize empty lines that will be updated
         self.lines[plot_idx] = []
@@ -410,307 +445,6 @@ class GeneralizedVisualizer:
         else:
             # Simple key lookup
             return self.data_dict.get(data_key)
-
-    def _create_sliders(self):
-        """Create all slider widgets, centered below plots."""
-        slider_width = 0.50
-        slider_left = 0.25
-        for idx, config in enumerate(self.slider_configs):
-            pos = list(config.position)
-            pos[0] = slider_left
-            pos[2] = slider_width
-            pos[3] = 0.022
-            pos[1] = 0.04 - (idx * 0.038)
-
-            ax_slider = self.fig.add_axes(pos, facecolor=DARK_COLORS["widget_bg"])
-            slider = Slider(
-                ax=ax_slider,
-                label=config.label,
-                valmin=config.valmin,
-                valmax=config.valmax,
-                valinit=config.valinit,
-                valstep=config.valstep,
-                color=DARK_COLORS["widget_active"],
-            )
-
-            slider.label.set_color(DARK_COLORS["text"])
-            slider.valtext.set_color(DARK_COLORS["text"])
-
-            slider.on_changed(
-                lambda val, name=config.name: self._on_slider_change(name, val)
-            )
-            self.sliders[config.name] = slider
-
-    def _on_slider_change(self, slider_name: str, value: float):
-        """Callback when any slider changes."""
-        self.slider_values[slider_name] = value
-        for idx, (ax, config) in enumerate(zip(self.axes, self.plot_configs)):
-            self._update_plot(ax, config, idx)
-        self.fig.canvas.draw_idle()
-
-    def _create_reset_button(self):
-        """Create reset button to restore initial slider values."""
-        # Deselect All button
-        deselect_all_ax = self.fig.add_axes([0.37, 0.02, 0.12, 0.04])
-        deselect_all_ax.set_facecolor(DARK_COLORS["widget_bg"])
-        self.deselect_all_ext_button = Button(
-            deselect_all_ax,
-            "Deselect All",
-            color=DARK_COLORS["widget_bg"],
-            hovercolor=DARK_COLORS["widget_active"],
-        )
-        self.deselect_all_ext_button.label.set_color(DARK_COLORS["text"])
-        self.deselect_all_ext_button.on_clicked(self._on_deselect_all)
-
-        # Select All button
-        select_all_ax = self.fig.add_axes([0.55, 0.02, 0.12, 0.04])
-        select_all_ax.set_facecolor(DARK_COLORS["widget_bg"])
-        self.select_all_ext_button = Button(
-            select_all_ax,
-            "Select All",
-            color=DARK_COLORS["widget_bg"],
-            hovercolor=DARK_COLORS["widget_active"],
-        )
-        self.select_all_ext_button.label.set_color(DARK_COLORS["text"])
-        self.select_all_ext_button.on_clicked(self._on_select_all)
-
-        # Reset button
-        button_ax = self.fig.add_axes([0.80, 0.02, 0.12, 0.04])
-        button_ax.set_facecolor(DARK_COLORS["widget_bg"])
-        self.reset_button = Button(
-            button_ax,
-            "Reset",
-            color=DARK_COLORS["widget_bg"],
-            hovercolor=DARK_COLORS["widget_active"],
-        )
-        self.reset_button.label.set_color(DARK_COLORS["text"])
-        self.reset_button.on_clicked(self._on_reset)
-
-    def _on_reset(self, event):
-        """Reset all sliders to initial values."""
-        for config in self.slider_configs:
-            self.sliders[config.name].reset()
-
-    def _create_checkboxes(self):
-        """Create checkbox panel for toggling data series visibility."""
-        self.series_labels = []
-        self.series_colors = {}
-        for config in self.plot_configs:
-            if config.labels:
-                for i, label in enumerate(config.labels):
-                    if label not in self.series_labels:
-                        self.series_labels.append(label)
-                        if config.colors and i < len(config.colors):
-                            self.series_colors[label] = config.colors[i]
-
-        self.series_visibility = {label: True for label in self.series_labels}
-        actives = [True] * len(self.series_labels)
-
-        self.legend_expanded = True
-
-        num_cols = 3 if len(self.series_labels) > 6 else 2
-        num_rows = (len(self.series_labels) + num_cols - 1) // num_cols
-
-        checkbox_height = 0.032 * num_rows + 0.025
-        checkbox_width = 0.28
-
-        legend_y = 0.02
-
-        self.legend_title_ax = self.fig.add_axes(
-            [0.02, legend_y + checkbox_height + 0.01, 0.28, 0.03]
-        )
-        self.legend_title_ax.set_facecolor(DARK_COLORS["background"])
-        self.legend_title_ax.set_xticks([])
-        self.legend_title_ax.set_yticks([])
-        for spine in self.legend_title_ax.spines.values():
-            spine.set_visible(False)
-        self.legend_title_ax.text(
-            0.0,
-            0.5,
-            "Legend ▾",
-            fontsize=12,
-            fontweight="bold",
-            color=DARK_COLORS["text"],
-            transform=self.legend_title_ax.transAxes,
-            va="center",
-        )
-
-        def on_legend_click(event):
-            if event.inaxes != self.legend_title_ax:
-                return
-            self.legend_expanded = not self.legend_expanded
-            if self.legend_expanded:
-                self.checkbox_ax.set_visible(True)
-                self.checkbox_ax.set_position(
-                    [0.02, legend_y, checkbox_width, checkbox_height]
-                )
-                self.legend_title_ax.set_position(
-                    [0.02, legend_y + checkbox_height + 0.01, 0.28, 0.03]
-                )
-                self.legend_title_ax.texts[0].set_text("Legend ▾")
-                self.select_all_button.ax.set_visible(True)
-                self.deselect_all_button.ax.set_visible(True)
-            else:
-                self.checkbox_ax.set_visible(False)
-                self.legend_title_ax.set_position([0.02, legend_y, 0.28, 0.03])
-                self.legend_title_ax.texts[0].set_text("Legend ▸")
-                self.select_all_button.ax.set_visible(False)
-                self.deselect_all_button.ax.set_visible(False)
-            self.fig.canvas.draw_idle()
-
-        self.fig.canvas.mpl_connect("button_press_event", on_legend_click)
-
-        self.checkbox_ax = self.fig.add_axes(
-            [0.02, legend_y, checkbox_width, checkbox_height]
-        )
-        self.checkbox_ax.set_facecolor(DARK_COLORS["background"])
-        self.checkbox_ax.set_xticks([])
-        self.checkbox_ax.set_yticks([])
-        for spine in self.checkbox_ax.spines.values():
-            spine.set_visible(False)
-
-        display_labels = [
-            lbl[:18] + ".." if len(lbl) > 18 else lbl for lbl in self.series_labels
-        ]
-        self.checkboxes = CheckButtons(self.checkbox_ax, display_labels, actives)
-
-        n = len(self.series_labels)
-        self.checkboxes.set_label_props(
-            {"color": [DARK_COLORS["text"]] * n, "fontsize": [10] * n}
-        )
-        self.checkboxes.set_frame_props(
-            {
-                "facecolor": [DARK_COLORS["widget_bg"]] * n,
-                "edgecolor": [DARK_COLORS["accent"]] * n,
-                "linewidth": [1.5] * n,
-            }
-        )
-        self.checkboxes.set_check_props(
-            {"facecolor": [DARK_COLORS["widget_active"]] * n}
-        )
-
-        self.checkboxes.on_clicked(self._on_checkbox_toggle)
-
-        # Legend button dimensions
-        self.legend_button_width = 0.12
-        self.legend_button_height = 0.025
-
-        # Create legend buttons (Select All / Deselect All)
-        self._create_legend_buttons(legend_y, checkbox_height)
-
-    def _create_legend_buttons(self, legend_y, checkbox_height):
-        """Create Select All and Deselect All buttons inside the legend panel."""
-        button_y = legend_y + checkbox_height + 0.045
-
-        # Select All button
-        select_all_ax = self.fig.add_axes(
-            [0.02, button_y, self.legend_button_width, self.legend_button_height]
-        )
-        select_all_ax.set_facecolor(DARK_COLORS["widget_bg"])
-        self.select_all_button = Button(
-            select_all_ax,
-            "Select All",
-            color=DARK_COLORS["widget_bg"],
-            hovercolor=DARK_COLORS["widget_active"],
-        )
-        self.select_all_button.label.set_color(DARK_COLORS["text"])
-        self.select_all_button.on_clicked(self._on_select_all)
-
-        # Deselect All button
-        deselect_all_ax = self.fig.add_axes(
-            [0.15, button_y, self.legend_button_width, self.legend_button_height]
-        )
-        deselect_all_ax.set_facecolor(DARK_COLORS["widget_bg"])
-        self.deselect_all_button = Button(
-            deselect_all_ax,
-            "Deselect All",
-            color=DARK_COLORS["widget_bg"],
-            hovercolor=DARK_COLORS["widget_active"],
-        )
-        self.deselect_all_button.label.set_color(DARK_COLORS["text"])
-        self.deselect_all_button.on_clicked(self._on_deselect_all)
-
-    def _on_checkbox_toggle(self, label):
-        """Toggle visibility of a data series across all plots."""
-        if not getattr(self, "legend_expanded", True):
-            return
-
-        original_label = None
-        for series_label in self.series_labels:
-            display = (
-                series_label[:16] + ".." if len(series_label) > 16 else series_label
-            )
-            if display == label:
-                original_label = series_label
-                break
-
-        if original_label is None:
-            return
-
-        # Toggle visibility state
-        self.series_visibility[original_label] = not self.series_visibility[
-            original_label
-        ]
-        visible = self.series_visibility[original_label]
-
-        # Update all lines with this label across all plots
-        for plot_idx, line_list in self.lines.items():
-            for line in line_list:
-                if hasattr(line, "get_label") and line.get_label() == original_label:
-                    line.set_visible(visible)
-
-        # Update legends to reflect visibility
-        for ax in self.axes:
-            legend = ax.get_legend()
-            if legend:
-                for text, handle in zip(legend.get_texts(), legend.legend_handles):
-                    if text.get_text() == original_label:
-                        text.set_alpha(1.0 if visible else 0.3)
-                        handle.set_alpha(1.0 if visible else 0.3)
-
-        # Hide/show entire plots based on whether they have any visible lines
-        if self.hide_empty_plots:
-            self._update_plot_visibility()
-
-        self.fig.canvas.draw_idle()
-
-    def _on_select_all(self, event):
-        """Select all data series for visibility."""
-        for label in self.series_labels:
-            self.series_visibility[label] = True
-        self._update_all_visibility()
-
-    def _on_deselect_all(self, event):
-        """Deselect all data series for visibility."""
-        for label in self.series_labels:
-            self.series_visibility[label] = False
-        self._update_all_visibility()
-
-    def _update_all_visibility(self):
-        """Update visibility of all lines, legends, and plots based on current state."""
-        for label in self.series_labels:
-            visible = self.series_visibility[label]
-
-            # Update all lines with this label across all plots
-            for plot_idx, line_list in self.lines.items():
-                for line in line_list:
-                    if hasattr(line, "get_label") and line.get_label() == label:
-                        line.set_visible(visible)
-
-            # Update legends to reflect visibility
-            for ax in self.axes:
-                legend = ax.get_legend()
-                if legend:
-                    for text, handle in zip(legend.get_texts(), legend.legend_handles):
-                        if text.get_text() == label:
-                            text.set_alpha(1.0 if visible else 0.3)
-                            handle.set_alpha(1.0 if visible else 0.3)
-
-        # Hide/show entire plots based on whether they have any visible lines
-        if self.hide_empty_plots:
-            self._update_plot_visibility()
-
-        self.fig.canvas.draw_idle()
 
     def _update_plot_visibility(self):
         """Hide plots that have no visible lines, show plots that have visible lines."""

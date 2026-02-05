@@ -6,16 +6,16 @@ An interactive visualization tool for analyzing Physics-Informed Neural Networks
 
 ## Features
 
-- Dark mode interface
-- Interactive sliders to adjust parameters (neurons, hidden layers, Adam iterations)
-- Multiple synchronized plots:
+- **Dark/Light/High-Contrast themes** - Choose the visual style that works best for you
+- **Interactive sliders** - Adjust parameters (neurons, hidden layers, Adam iterations)
+- **Multiple synchronized plots**:
   - ODE solution comparison (analytic vs PINN)
   - Coefficient comparison
   - Coefficient and solution error plots
   - Training loss curves (total, BC, PDE, supervised)
-- Toggle data series visibility with checkboxes
-- Auto-hide empty plots (plots with no data are automatically hidden)
-- Reset button to restore default slider values
+- **Toggle data series visibility** - Control which series are visible across all plots
+- **Auto-hide empty plots** - Plots with no data are automatically hidden
+- **Reset button** - Restore sliders to their default values
 
 ## Installation
 
@@ -75,16 +75,45 @@ visualizer = PowerSeriesVisualizer(
 visualizer.show()
 ```
 
-### Coefficient File Format
+### Using Themes
 
-The coefficients JSON file should have keys in the format `n{neurons}_h{hidden_layers}_a{adam_iterations}`:
+```python
+from visualizer import GeneralizedVisualizer
+from theme import get_theme
 
-```json
-{
-  "n10_h1_a10000": [1.0, 2.01, 0.99, 0.167, 0.0168],
-  "n20_h1_a10000": [1.0, 2.005, 0.995, 0.1667, 0.01667],
-  "n30_h2_a20000": [1.0, 2.001, 0.999, 0.16667, 0.016667]
-}
+# Use a specific theme
+theme = get_theme("dark")  # or "light", "high_contrast"
+
+# Create visualizer with custom theme
+visualizer = GeneralizedVisualizer(
+    data_dict=data,
+    plot_configs=plot_configs,
+    slider_configs=slider_configs,
+    theme=theme
+)
+```
+
+## Project Structure
+
+```
+nn-viewer/
+├── main.py              # Entry point
+├── visualizer.py        # Main visualization class
+├── theme/
+│   ├── __init__.py     # Theme exports
+│   └── colors.py        # Theme management (Theme class, built-in themes)
+├── ui/
+│   ├── __init__.py     # UI component exports
+│   ├── checkbox_panel.py # Checkbox panel for series visibility
+│   ├── slider_panel.py  # Slider panel for parameter control
+│   └── button_panel.py  # Button panel for actions
+├── tests/
+│   ├── __init__.py     # Pytest configuration
+│   ├── test_checkbox_panel.py
+│   ├── test_slider_panel.py
+│   └── test_theme.py
+└── docs/
+    └── CONTRIBUTING.md   # Contribution guidelines
 ```
 
 ## Controls
