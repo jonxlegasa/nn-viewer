@@ -15,7 +15,7 @@ nn-viewer/
 │   └── colors.py        # Theme management
 ├── ui/
 │   ├── __init__.py      # UI exports
-│   ├── checkbox_panel.py # Checkbox panel component
+│   ├── checkbox_panel.py # Toggle button legend panel component
 │   ├── slider_panel.py   # Slider panel component
 │   └── button_panel.py   # Button panel component
 ├── tests/

@@ -13,7 +13,7 @@ An interactive visualization tool for analyzing Physics-Informed Neural Networks
   - Coefficient comparison
   - Coefficient and solution error plots
   - Training loss curves (total, BC, PDE, supervised)
-- **Toggle data series visibility** - Control which series are visible across all plots
+- **Collapsible legend panel** - Toggle data series visibility with a hamburger menu (☰) that expands into toggle buttons
 - **Auto-hide empty plots** - Plots with no data are automatically hidden
 - **Reset button** - Restore sliders to their default values
 
@@ -104,7 +104,7 @@ nn-viewer/
 │   └── colors.py        # Theme management (Theme class, built-in themes)
 ├── ui/
 │   ├── __init__.py     # UI component exports
-│   ├── checkbox_panel.py # Checkbox panel for series visibility
+│   ├── checkbox_panel.py # Toggle button legend panel for series visibility
 │   ├── slider_panel.py  # Slider panel for parameter control
 │   └── button_panel.py  # Button panel for actions
 ├── tests/
@@ -119,7 +119,7 @@ nn-viewer/
 ## Controls
 
 - **Sliders**: Adjust neurons, hidden layers, and Adam iterations to view different training configurations
-- **Checkboxes**: Toggle visibility of individual data series across all plots
+- **Legend (☰)**: Collapsible toggle button panel — click the hamburger menu to expand/collapse, click individual buttons to show/hide data series
 - **Reset**: Restore sliders to their initial values
 
 ## Requirements
