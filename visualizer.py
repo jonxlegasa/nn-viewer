@@ -704,13 +704,12 @@ class PowerSeriesVisualizer(GeneralizedVisualizer):
                 xlabel="Iteration",
                 ylabel="Loss",
                 plot_type="semilogy",
-                colors=["#e0e0e0", "#ef5350", "#42a5f5", "#66bb6a", "#ffa726"],
+                colors=["#e0e0e0", "#ef5350", "#42a5f5", "#66bb6a"],
                 labels=[
                     "Total Loss",
                     "BC Loss",
                     "PDE Loss",
                     "Supervised Loss",
-                    "Other",
                 ],
             )
             configs.append(loss_config)
@@ -747,17 +746,6 @@ class PowerSeriesVisualizer(GeneralizedVisualizer):
                     plot_type="semilogy",
                     colors=["#66bb6a"],  # Light green
                     labels=["Supervised Loss"],
-                )
-            )
-            configs.append(
-                PlotConfig(
-                    data_key="loss_data.other_loss",
-                    title="Other Loss",
-                    xlabel="Iteration",
-                    ylabel="Loss",
-                    plot_type="semilogy",
-                    colors=["#ffa726"],  # Light orange
-                    labels=["Other Loss"],
                 )
             )
         return configs

@@ -1,4 +1,4 @@
-"""Tests for the checkbox panel module."""
+"""Tests for the toggle button panel module."""
 
 import pytest
 from unittest.mock import Mock, MagicMock, patch
@@ -20,7 +20,7 @@ def mock_matplotlib():
 
 
 class TestCheckboxPanel:
-    """Test cases for CheckboxPanel class."""
+    """Test cases for CheckboxPanel (toggle button panel) class."""
 
     def test_initialization_with_empty_configs(self):
         """Test CheckboxPanel initialization with empty plot configs."""
@@ -29,7 +29,6 @@ class TestCheckboxPanel:
 
     def test_visibility_state_initialization(self):
         """Test that visibility state is correctly initialized."""
-        # Test the visibility dictionary structure
         series_labels = ["Label1", "Label2", "Label3"]
         visibility = {label: True for label in series_labels}
 
@@ -70,7 +69,7 @@ class TestCheckboxPanel:
         # Long label
         assert (
             get_display_label("ThisIsAVeryLongLabelThatExceedsEighteenCharacters")
-            == "ThisIsAVeryLongL.."
+            == "ThisIsAVeryLongLab.."
         )
 
     def test_label_deduplication(self):
@@ -105,25 +104,35 @@ class TestCheckboxPanel:
         assert "Label4" in labels
         assert series_colors["Label1"] == "#color1"  # First occurrence
 
-    def test_checkbox_callback_registration(self):
+    def test_callback_registration(self):
         """Test callback registration pattern."""
+        results = []
         callbacks = []
 
         def on_visibility_changed(label, visible):
-            callbacks.append((label, visible))
+            results.append((label, visible))
 
-        # Register callbacks
+        # Register callback
         callbacks.append(on_visibility_changed)
 
         # Simulate toggle event
-        def simulate_toggle(label, visible):
-            for callback in callbacks:
-                callback(label, visible)
+        for callback in callbacks:
+            callback("TestLabel", False)
 
-        simulate_toggle("TestLabel", False)
+        assert len(results) == 1
+        assert results[0] == ("TestLabel", False)
 
-        assert len(callbacks) == 2  # Original + registered
-        assert callbacks[1]("TestLabel", True) is None  # Callback returns None
+    def test_expanded_collapsed_state(self):
+        """Test expand/collapse state tracking."""
+        expanded = True
+
+        # Collapse
+        expanded = not expanded
+        assert expanded is False
+
+        # Expand
+        expanded = not expanded
+        assert expanded is True
 
 
 class TestCheckboxPanelIntegration:

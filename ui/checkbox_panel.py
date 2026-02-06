@@ -1,28 +1,36 @@
-"""Checkbox panel module for UI components."""
+"""Toggle button panel module for UI components."""
 
-from matplotlib.widgets import CheckButtons
+from matplotlib.widgets import Button
 from typing import Dict, List, Callable, Optional, Tuple, Any
 
 
 class CheckboxPanel:
-    """A checkbox panel for toggling data series visibility.
+    """A collapsible toggle-button panel for controlling data series visibility.
 
-    This class manages a group of checkboxes that control which data series
-    are visible in the visualization. It emits callbacks when visibility
-    changes so the parent visualization can update accordingly.
+    Each series gets a toggle button that switches between active (visible)
+    and inactive (hidden) states. The entire panel can be collapsed or
+    expanded via a header button.
 
     Parameters:
     -----------
     fig : matplotlib.figure.Figure
-        The figure to add the checkbox panel to
+        The figure to add the panel to
     plot_configs : list of PlotConfig
-        Plot configurations containing labels for checkbox creation
+        Plot configurations containing labels for toggle button creation
     colors : dict
         Color scheme dictionary with keys like 'text', 'accent', 'widget_bg', 'widget_active'
     position : tuple, optional
-        Position [left, bottom, width, height] for the checkbox panel
+        Position [left, bottom, width, height] for the panel header
         Default: (0.01, 0.90, 0.10, 0.15)
     """
+
+    # Layout constants
+    _BUTTON_HEIGHT = 0.035
+    _BUTTON_GAP = 0.004
+    _HEADER_HEIGHT = 0.035
+    _HEADER_WIDTH = 0.03
+    _PANEL_WIDTH = 0.11
+    _BUTTON_COLOR = "#3a3a3a"
 
     def __init__(
         self,
@@ -40,14 +48,20 @@ class CheckboxPanel:
         self.series_labels: List[str] = []
         self.series_colors: Dict[str, str] = {}
         self.series_visibility: Dict[str, bool] = {}
-        self.checkboxes = None
         self._callbacks: List[Callable[[str, bool], None]] = []
 
-        # Build the checkbox panel
+        # Toggle button widgets and axes
+        self._toggle_buttons: Dict[str, Button] = {}
+        self._toggle_axes: Dict[str, Any] = {}
+        self._header_button: Optional[Button] = None
+        self._header_ax: Optional[Any] = None
+        self._expanded = True
+
+        # Build the panel
         self._create_widgets()
 
     def _create_widgets(self):
-        """Create the checkbox widgets based on plot configurations."""
+        """Create the toggle button widgets based on plot configurations."""
         # Extract labels and colors from plot configs
         for config in self.plot_configs:
             if config.labels:
@@ -59,114 +73,119 @@ class CheckboxPanel:
 
         # Initialize visibility state (all visible by default)
         self.series_visibility = {label: True for label in self.series_labels}
-        actives = [True] * len(self.series_labels)
 
-        # Calculate panel size based on number of labels
-        num_cols = 3 if len(self.series_labels) > 6 else 2
-        num_rows = (len(self.series_labels) + num_cols - 1) // num_cols
+        if not self.series_labels:
+            return
 
-        checkbox_height = 0.06 * num_rows + 0.015
-        checkbox_width = 0.10
-
-        # Adjust position based on content
-        adjusted_position = [
+        # Create the hamburger menu header button (small square)
+        header_top = self.position[1]
+        header_pos = [
             self.position[0],
-            self.position[1] - checkbox_height + 0.15,
-            checkbox_width,
-            checkbox_height,
+            header_top,
+            self._HEADER_WIDTH,
+            self._HEADER_HEIGHT,
         ]
-
-        # Create axis for checkboxes (invisible axis that holds the widgets)
-        self.checkbox_ax = self.fig.add_axes(adjusted_position)
-        self.checkbox_ax.set_xticks([])
-        self.checkbox_ax.set_yticks([])
-        for spine in self.checkbox_ax.spines.values():
-            spine.set_visible(False)
-
-        # Create display labels (truncated if too long)
-        display_labels = [
-            lbl[:18] + ".." if len(lbl) > 18 else lbl for lbl in self.series_labels
-        ]
-
-        # Create the CheckButtons widget
-        self.checkboxes = CheckButtons(self.checkbox_ax, display_labels, actives)
-
-        # Apply custom styling
-        self._apply_styling()
-
-        # Register callback
-        self.checkboxes.on_clicked(self._on_toggle)
-
-    def _apply_styling(self):
-        """Apply color styling to the checkboxes."""
-        n = len(self.series_labels)
-
-        # Set label properties
-        self.checkboxes.set_label_props(
-            {"color": [self.colors["text"]] * n, "fontsize": [10] * n}
+        self._header_ax = self.fig.add_axes(header_pos)
+        self._header_button = Button(
+            self._header_ax,
+            "\u2630",
+            color=self.colors["accent"],
+            hovercolor=self.colors["widget_active"],
         )
+        self._header_button.label.set_color(self.colors["text"])
+        self._header_button.label.set_fontsize(12)
+        self._header_button.on_clicked(self._on_header_click)
 
-        # Set frame properties
-        self.checkboxes.set_frame_props(
-            {
-                "facecolor": ["none"] * n,
-                "edgecolor": [self.colors["accent"]] * n,
-                "linewidth": [1.5] * n,
-            }
-        )
+        # Create a toggle button for each series label
+        for idx, label in enumerate(self.series_labels):
+            btn_top = (
+                header_top
+                - (idx + 1) * (self._BUTTON_HEIGHT + self._BUTTON_GAP)
+                - self._BUTTON_GAP
+            )
+            btn_pos = [
+                self.position[0],
+                btn_top,
+                self._PANEL_WIDTH,
+                self._BUTTON_HEIGHT,
+            ]
 
-        # Set checkbox check properties
-        self.checkboxes.set_check_props(
-            {"facecolor": [self.colors["widget_active"]] * n}
-        )
+            ax = self.fig.add_axes(btn_pos)
+            display_label = label[:18] + ".." if len(label) > 18 else label
+
+            btn = Button(
+                ax,
+                display_label,
+                color=self._BUTTON_COLOR,
+                hovercolor=self.colors["widget_active"],
+            )
+            btn.label.set_color(self.colors["text"])
+            btn.label.set_fontsize(9)
+
+            # Store and wire up
+            self._toggle_axes[label] = ax
+            self._toggle_buttons[label] = btn
+            btn.on_clicked(lambda event, lbl=label: self._on_toggle(lbl))
+
+    def _on_header_click(self, event):
+        """Toggle the panel between expanded and collapsed states."""
+        self._expanded = not self._expanded
+
+        # Show or hide all toggle buttons
+        for label in self.series_labels:
+            ax = self._toggle_axes.get(label)
+            if ax is not None:
+                ax.set_visible(self._expanded)
+
+        self.fig.canvas.draw_idle()
 
     def _on_toggle(self, label: str):
-        """Handle checkbox toggle event.
+        """Handle toggle button click.
 
         Parameters:
         -----------
         label : str
-            The display label of the toggled checkbox
+            The series label of the toggled button
         """
-        # Find the original (non-truncated) label
-        original_label = self._get_original_label(label)
-
-        if original_label is None:
-            return
-
         # Toggle visibility state
-        self.series_visibility[original_label] = not self.series_visibility[
-            original_label
-        ]
-        visible = self.series_visibility[original_label]
+        self.series_visibility[label] = not self.series_visibility[label]
+        visible = self.series_visibility[label]
+
+        # Update button appearance
+        self._update_button_style(label, visible)
 
         # Notify all registered callbacks
         for callback in self._callbacks:
             try:
-                callback(original_label, visible)
+                callback(label, visible)
             except Exception:
                 pass  # Silently ignore callback errors
 
-    def _get_original_label(self, display_label: str) -> Optional[str]:
-        """Get the original label from a display label (which may be truncated).
+        self.fig.canvas.draw_idle()
+
+    def _update_button_style(self, label: str, visible: bool):
+        """Update a toggle button's appearance based on its state.
 
         Parameters:
         -----------
-        display_label : str
-            The truncated display label
-
-        Returns:
-        --------
-        str or None
-            The original label, or None if not found
+        label : str
+            The series label
+        visible : bool
+            Whether the series is visible (active)
         """
-        for series_label in self.series_labels:
-            display = (
-                series_label[:18] + ".." if len(series_label) > 16 else series_label
-            )
-            if display == display_label:
-                return series_label
-        return None
+        btn = self._toggle_buttons.get(label)
+        ax = self._toggle_axes.get(label)
+        if btn is None or ax is None:
+            return
+
+        if visible:
+            btn.color = self._BUTTON_COLOR
+            ax.set_facecolor(self._BUTTON_COLOR)
+            btn.label.set_alpha(1.0)
+        else:
+            btn.color = self.colors["widget_bg"]
+            ax.set_facecolor(self.colors["widget_bg"])
+            btn.label.set_alpha(0.4)
 
     def on_visibility_changed(self, callback: Callable[[str, bool], None]):
         """Register a callback for visibility changes.
@@ -208,12 +227,7 @@ class CheckboxPanel:
             return
 
         self.series_visibility[label] = visible
-
-        # Update checkbox state
-        display_label = label[:18] + ".." if len(label) > 18 else label
-        if self.checkboxes and display_label in self.checkboxes.labels:
-            idx = list(self.checkboxes.labels).index(display_label)
-            self.checkboxes.active[idx] = visible
+        self._update_button_style(label, visible)
 
         # Notify callbacks
         for callback in self._callbacks:
@@ -262,3 +276,13 @@ class CheckboxPanel:
             Dictionary mapping series labels to colors
         """
         return self.series_colors.copy()
+
+    def is_expanded(self) -> bool:
+        """Check if the panel is currently expanded.
+
+        Returns:
+        --------
+        bool
+            True if expanded, False if collapsed
+        """
+        return self._expanded
