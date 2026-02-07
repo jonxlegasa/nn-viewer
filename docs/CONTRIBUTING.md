@@ -9,7 +9,11 @@ The project is organized as follows:
 ```
 nn-viewer/
 ├── main.py              # Entry point
-├── visualizer.py        # Main visualization class (~500 lines)
+├── visualizer.py        # Base visualization framework (GeneralizedVisualizer, PlotConfig)
+├── views/
+│   ├── __init__.py      # View exports
+│   ├── power_series.py  # PowerSeriesVisualizer for multi-parameter coefficient analysis
+│   └── ode_results.py   # ODEResultsVisualizer for real PINN training runs
 ├── theme/
 │   ├── __init__.py      # Theme exports
 │   └── colors.py        # Theme management

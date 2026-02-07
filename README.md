@@ -8,6 +8,7 @@ An interactive visualization tool for analyzing Physics-Informed Neural Networks
 
 - **Dark/Light/High-Contrast themes** - Choose the visual style that works best for you
 - **Interactive sliders** - Adjust parameters (neurons, hidden layers, Adam iterations)
+- **ODE results visualizer** - Visualize real PINN training runs with an iteration slider, 3-line function comparison (analytical, benchmark series, PINN series), and dynamic loss history that reveals progressively as you slide through iterations
 - **Multiple synchronized plots**:
   - ODE solution comparison (analytic vs PINN)
   - Coefficient comparison
@@ -40,8 +41,11 @@ uv run python main.py
 
 ### Using with Your Own Data
 
+#### Power Series Visualizer
+
 ```python
-from visualizer import PowerSeriesVisualizer, setup_backend
+from visualizer import setup_backend
+from views import PowerSeriesVisualizer
 
 # Initialize backend
 setup_backend()
@@ -75,6 +79,25 @@ visualizer = PowerSeriesVisualizer(
 visualizer.show()
 ```
 
+#### ODE Results Visualizer
+
+```python
+from visualizer import setup_backend
+from views import ODEResultsVisualizer
+
+setup_backend()
+
+visualizer = ODEResultsVisualizer(
+    results_json_path="results/results.json",
+    loss_csv_path="results/loss.csv",
+    x_range=(-1, 1),
+    num_points=1000,
+    initial_iteration=1000,
+)
+
+visualizer.show()
+```
+
 ### Using Themes
 
 ```python
@@ -98,17 +121,21 @@ visualizer = GeneralizedVisualizer(
 ```
 nn-viewer/
 ├── main.py              # Entry point
-├── visualizer.py        # Main visualization class
+├── visualizer.py        # Base visualization framework (GeneralizedVisualizer, PlotConfig)
+├── views/
+│   ├── __init__.py      # View exports
+│   ├── power_series.py  # PowerSeriesVisualizer for multi-parameter coefficient analysis
+│   └── ode_results.py   # ODEResultsVisualizer for real PINN training runs
 ├── theme/
-│   ├── __init__.py     # Theme exports
+│   ├── __init__.py      # Theme exports
 │   └── colors.py        # Theme management (Theme class, built-in themes)
 ├── ui/
-│   ├── __init__.py     # UI component exports
+│   ├── __init__.py      # UI component exports
 │   ├── checkbox_panel.py # Toggle button legend panel for series visibility
 │   ├── slider_panel.py  # Slider panel for parameter control
 │   └── button_panel.py  # Button panel for actions
 ├── tests/
-│   ├── __init__.py     # Pytest configuration
+│   ├── __init__.py      # Pytest configuration
 │   ├── test_checkbox_panel.py
 │   ├── test_slider_panel.py
 │   └── test_theme.py
@@ -118,7 +145,7 @@ nn-viewer/
 
 ## Controls
 
-- **Sliders**: Adjust neurons, hidden layers, and Adam iterations to view different training configurations
+- **Sliders**: Adjust neurons, hidden layers, and Adam iterations to view different training configurations. In ODE results mode, use the Iteration slider to scrub through training snapshots.
 - **Legend (☰)**: Collapsible toggle button panel — click the hamburger menu to expand/collapse, click individual buttons to show/hide data series
 - **Reset**: Restore sliders to their initial values
 

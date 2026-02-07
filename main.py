@@ -1,6 +1,9 @@
 import json
 import numpy as np
-from visualizer import PowerSeriesVisualizer, GeneralizedVisualizer, PlotConfig, SliderConfig, setup_backend
+from visualizer import GeneralizedVisualizer, PlotConfig, setup_backend
+from views import PowerSeriesVisualizer, ODEResultsVisualizer
+from ui import SliderConfig
+
 
 # Example with multi-parameter sliders (neurons, hidden layers, adam iterations)
 def example_with_loss():
@@ -68,36 +71,20 @@ def example_with_loss():
 
     visualizer.show()
 
-# Example loading data from real files
-def example_with_real_data():
-    """
-    Example showing how to load and use your actual training data.
-    """
 
-    # Load your predicted coefficients (with multi-parameter keys)
-    with open('path/to/your/coefficients.json', 'r') as f:
-        predicted_coeffs = json.load(f)
-
-    # Load your loss data (assuming you saved it as JSON)
-    # Keys should match coefficient keys: "n{neurons}_h{hidden}_a{adam}"
-    with open('path/to/your/loss_data.json', 'r') as f:
-        loss_data = json.load(f)
-
-    # Your true coefficients from analytical solution
-    true_coeffs = [1.0, 2.0, 1.0, 1.0/6.0, 1.0/60.0]  # Replace with your actual values
-
-    # Create visualizer
-    visualizer = PowerSeriesVisualizer(
-        json_file_path='path/to/your/coefficients.json',
-        true_coefficients=true_coeffs,
-        loss_data=loss_data,
-        x_range=(0, 1),
+def example_with_real_ode_data():
+    """Visualize real PINN training results for an ODE problem."""
+    visualizer = ODEResultsVisualizer(
+        results_json_path="results/results.json",
+        loss_csv_path="results/loss.csv",
+        x_range=(-1, 1),
         num_points=1000,
-        neuron_range=(10, 50),
-        initial_neurons=30
+        initial_iteration=1000,
     )
     visualizer.show()
 
+
 if __name__ == "__main__":
     setup_backend()
-    example_with_loss()
+    # example_with_loss()        # Synthetic multi-parameter demo
+    example_with_real_ode_data()  # Real PINN training results
